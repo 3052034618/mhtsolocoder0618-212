@@ -112,7 +112,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     team_id TEXT,
-    route_id TEXT NOT NULL,
+    route_id TEXT,
     checkin_time TEXT NOT NULL DEFAULT (datetime('now')),
     expected_return_time TEXT NOT NULL,
     checkout_time TEXT,

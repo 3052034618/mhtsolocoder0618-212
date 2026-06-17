@@ -9,14 +9,8 @@ router.post('/checkin', authMiddleware, (req: Request, res: Response): void => {
   const { teamId, routeId, expectedReturnTime } = req.body
   const userId = req.user!.userId
 
-  if (!routeId || !expectedReturnTime) {
-    res.status(400).json({ success: false, error: '路线ID和预计返回时间不能为空' })
-    return
-  }
-
-  const route = db.prepare('SELECT id FROM routes WHERE id = ?').get(routeId)
-  if (!route) {
-    res.status(404).json({ success: false, error: '路线不存在' })
+  if (!expectedReturnTime) {
+    res.status(400).json({ success: false, error: '预计返回时间不能为空' })
     return
   }
 
@@ -33,7 +27,7 @@ router.post('/checkin', authMiddleware, (req: Request, res: Response): void => {
   db.prepare(`
     INSERT INTO safety_checkins (id, user_id, team_id, route_id, expected_return_time, status)
     VALUES (?, ?, ?, ?, ?, 'active')
-  `).run(id, userId, teamId || null, routeId, expectedReturnTime)
+  `).run(id, userId, teamId || null, routeId || null, expectedReturnTime)
 
   const checkin = db.prepare('SELECT * FROM safety_checkins WHERE id = ?').get(id) as any
   res.status(201).json({ success: true, data: checkin })
@@ -52,7 +46,7 @@ router.post('/checkout', authMiddleware, (req: Request, res: Response): void => 
   }
 
   db.prepare(`
-    UPDATE safety_checkins SET checkout_time = datetime('now'), status = 'returned'
+    UPDATE safety_checkins SET checkout_time = datetime('now'), status = 'completed'
     WHERE id = ?
   `).run(activeCheckin.id)
 

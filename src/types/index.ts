@@ -72,12 +72,13 @@ export interface Message {
 export interface SafetyCheckin {
   id: string
   userId: string
-  teamId: string
-  routeId: string
+  teamId: string | null
+  routeId: string | null
   checkinTime: string
   expectedReturnTime: string
   checkoutTime: string | null
-  status: 'active' | 'returned' | 'overdue'
+  status: 'active' | 'completed' | 'overdue'
+  routeName?: string
 }
 
 export interface EmergencyContact {

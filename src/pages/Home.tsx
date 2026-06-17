@@ -16,9 +16,9 @@ const difficulties = ['全部', '简单', '中等', '困难', '专家']
 const durations = ['全部', '半天', '1天', '2-3天', '4天以上']
 
 const seasonMap: Record<number, string> = {
-  0: '冬', 1: '冬', 2: '春', 3: '春', 4: '春',
-  5: '夏', 6: '夏', 7: '夏', 8: '秋', 9: '秋',
-  10: '秋', 11: '冬',
+  0: '冬季', 1: '冬季', 2: '春季', 3: '春季', 4: '春季',
+  5: '夏季', 6: '夏季', 7: '夏季', 8: '秋季', 9: '秋季',
+  10: '秋季', 11: '冬季',
 }
 
 function getCurrentSeason(): string {
@@ -195,7 +195,7 @@ export default function Home() {
       {seasonRoutes.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 mt-12">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="section-title">{season}季推荐</h2>
+            <h2 className="section-title">{season}推荐</h2>
             <span className="text-sm text-gray-400 flex items-center gap-1">
               查看更多 <ChevronRight size={14} />
             </span>

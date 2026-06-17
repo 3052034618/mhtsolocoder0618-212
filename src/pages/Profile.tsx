@@ -29,15 +29,39 @@ function MiniTeamCard({ team }: { team: Team }) {
     full: { text: '已满员', cls: 'bg-gray-100 text-gray-600' },
     confirmed: { text: '已出发', cls: 'bg-blue-100 text-blue-700' },
     completed: { text: '已结束', cls: 'bg-gray-200 text-gray-500' },
+    pending: { text: '待审核', cls: 'bg-yellow-100 text-yellow-700' },
   }
-  const s = statusMap[team.status] || { text: team.status, cls: 'bg-gray-100 text-gray-600' }
+  const myStatus = (team as any).myStatus
+  const displayStatus = myStatus === 'pending' ? 'pending' : team.status
+  const s = statusMap[displayStatus] || { text: displayStatus, cls: 'bg-gray-100 text-gray-600' }
+  const approved = team.approvedCount ?? 0
+  const expected = team.expectedCount ?? 0
+  const progress = expected > 0 ? Math.min((approved / expected) * 100, 100) : 0
+
   return (
-    <Link to={`/team/${team.id}`} className="card-static rounded-xl p-4 flex items-center gap-4">
-      <div className="flex-1 min-w-0">
-        <h4 className="font-medium text-sm text-gray-800 truncate">{team.routeName}</h4>
-        <p className="text-xs text-gray-500 mt-0.5">{team.date} · {team.meetingPoint}</p>
+    <Link to={`/team/${team.id}`} className="card-static rounded-xl p-4">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <h4 className="font-medium text-sm text-gray-800 truncate">{team.routeName}</h4>
+          <p className="text-xs text-gray-500 mt-0.5">{team.date} · {team.meetingPoint}</p>
+        </div>
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${s.cls}`}>{s.text}</span>
       </div>
-      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.cls}`}>{s.text}</span>
+      <div className="space-y-1.5">
+        <div className="flex justify-between text-xs">
+          <span className="text-gray-500 flex items-center gap-1">
+            <Users className="w-3 h-3" />
+            已加入 {approved} / {expected} 人
+          </span>
+          <span className="text-gray-400">{progress.toFixed(0)}%</span>
+        </div>
+        <div className="h-1.5 bg-fog-200 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-forest-500 rounded-full transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
     </Link>
   )
 }
