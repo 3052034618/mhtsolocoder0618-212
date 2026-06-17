@@ -49,6 +49,17 @@ export interface Team {
   members: TeamMember[]
   createdAt: string
   approvedCount?: number
+  itineraries?: ItineraryDay[]
+}
+
+export interface ItineraryDay {
+  id: string
+  teamId: string
+  dayIndex: number
+  routeNode: string
+  accommodation?: string
+  duration?: string
+  notes?: string
 }
 
 export interface TeamMember {
@@ -57,6 +68,8 @@ export interface TeamMember {
   userAvatar: string
   status: 'pending' | 'approved' | 'rejected'
   joinedAt: string
+  intro?: string | null
+  experience?: string | null
 }
 
 export interface Message {
@@ -79,6 +92,7 @@ export interface SafetyCheckin {
   checkoutTime: string | null
   status: 'active' | 'completed' | 'overdue'
   routeName?: string
+  teamName?: string
 }
 
 export interface EmergencyContact {

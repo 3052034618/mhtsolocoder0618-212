@@ -91,10 +91,24 @@ db.exec(`
     team_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
+    intro TEXT,
+    experience TEXT,
     joined_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (team_id) REFERENCES teams(id),
     FOREIGN KEY (user_id) REFERENCES users(id),
     UNIQUE(team_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS team_itineraries (
+    id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL,
+    day_index INTEGER NOT NULL,
+    route_node TEXT NOT NULL,
+    accommodation TEXT,
+    duration TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (team_id) REFERENCES teams(id)
   );
 
   CREATE TABLE IF NOT EXISTS messages (
@@ -146,6 +160,41 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_safety_checkins_status ON safety_checkins(status);
   CREATE INDEX IF NOT EXISTS idx_emergency_contacts_user ON emergency_contacts(user_id);
 `)
+
+// Schema migrations - add missing columns/tables to existing databases
+try {
+  const tmCols = db.prepare("PRAGMA table_info(team_members)").all() as { name: string }[]
+  const tmColNames = tmCols.map(c => c.name)
+  if (!tmColNames.includes('intro')) {
+    db.prepare("ALTER TABLE team_members ADD COLUMN intro TEXT").run()
+  }
+  if (!tmColNames.includes('experience')) {
+    db.prepare("ALTER TABLE team_members ADD COLUMN experience TEXT").run()
+  }
+} catch (e) {
+  console.warn('Migration team_members warning:', e)
+}
+
+try {
+  const tiExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='team_itineraries'").get() as any
+  if (!tiExists) {
+    db.exec(`
+      CREATE TABLE team_itineraries (
+        id TEXT PRIMARY KEY,
+        team_id TEXT NOT NULL,
+        day_index INTEGER NOT NULL,
+        route_node TEXT NOT NULL,
+        accommodation TEXT,
+        duration TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (team_id) REFERENCES teams(id)
+      );
+    `)
+  }
+} catch (e) {
+  console.warn('Migration team_itineraries warning:', e)
+}
 
 const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get() as { count: number }
 
@@ -301,23 +350,40 @@ if (userCount.count === 0) {
   }
 
   const teamMembers = [
-    { id: uuidv4(), team_id: teams[0].id, user_id: users[0].id, status: 'approved' },
-    { id: uuidv4(), team_id: teams[0].id, user_id: users[1].id, status: 'approved' },
-    { id: uuidv4(), team_id: teams[0].id, user_id: users[2].id, status: 'pending' },
-    { id: uuidv4(), team_id: teams[1].id, user_id: users[4].id, status: 'approved' },
-    { id: uuidv4(), team_id: teams[1].id, user_id: users[2].id, status: 'approved' },
-    { id: uuidv4(), team_id: teams[1].id, user_id: users[0].id, status: 'approved' },
-    { id: uuidv4(), team_id: teams[2].id, user_id: users[1].id, status: 'approved' },
-    { id: uuidv4(), team_id: teams[2].id, user_id: users[3].id, status: 'approved' },
-    { id: uuidv4(), team_id: teams[2].id, user_id: users[4].id, status: 'pending' },
+    { id: uuidv4(), team_id: teams[0].id, user_id: users[0].id, status: 'approved', intro: null, experience: null },
+    { id: uuidv4(), team_id: teams[0].id, user_id: users[1].id, status: 'approved', intro: null, experience: null },
+    { id: uuidv4(), team_id: teams[0].id, user_id: users[2].id, status: 'pending', intro: '有过高原徒步经验，身体素质好，可以帮大家背包', experience: '走过雨崩、稻城亚丁' },
+    { id: uuidv4(), team_id: teams[1].id, user_id: users[4].id, status: 'approved', intro: null, experience: null },
+    { id: uuidv4(), team_id: teams[1].id, user_id: users[2].id, status: 'approved', intro: null, experience: null },
+    { id: uuidv4(), team_id: teams[1].id, user_id: users[0].id, status: 'approved', intro: null, experience: null },
+    { id: uuidv4(), team_id: teams[2].id, user_id: users[1].id, status: 'approved', intro: null, experience: null },
+    { id: uuidv4(), team_id: teams[2].id, user_id: users[3].id, status: 'approved', intro: null, experience: null },
+    { id: uuidv4(), team_id: teams[2].id, user_id: users[4].id, status: 'pending', intro: '第一次露营，但参加过多次一日徒步，想体验山顶看日出', experience: '武功山、黄山、莫干山' },
   ]
 
   const insertTeamMember = db.prepare(
-    'INSERT INTO team_members (id, team_id, user_id, status) VALUES (?, ?, ?, ?)'
+    'INSERT INTO team_members (id, team_id, user_id, status, intro, experience) VALUES (?, ?, ?, ?, ?, ?)'
   )
 
   for (const m of teamMembers) {
-    insertTeamMember.run(m.id, m.team_id, m.user_id, m.status)
+    insertTeamMember.run(m.id, m.team_id, m.user_id, m.status, m.intro, m.experience)
+  }
+
+  const itineraries = [
+    { id: uuidv4(), team_id: teams[1].id, day_index: 1, route_node: '汤口镇换乘中心 → 云谷寺 → 白鹅岭 → 北海宾馆', accommodation: '北海宾馆', duration: '约6小时', notes: '建议坐云谷索道上山，节省体力' },
+    { id: uuidv4(), team_id: teams[1].id, day_index: 2, route_node: '光明顶看日出 → 飞来石 → 排云亭 → 西海大峡谷 → 慈光阁', accommodation: '山下民宿', duration: '约8小时', notes: '峡谷台阶多，注意膝盖保护' },
+    { id: uuidv4(), team_id: teams[0].id, day_index: 1, route_node: '西当村 → 南宗垭口 → 上雨崩', accommodation: '上雨崩客栈', duration: '约7小时', notes: '翻越南宗垭口约12公里，海拔上升1200米' },
+    { id: uuidv4(), team_id: teams[0].id, day_index: 2, route_node: '上雨崩 → 冰湖 → 上雨崩', accommodation: '上雨崩客栈', duration: '约6小时', notes: '冰湖往返海拔上升约800米，带够饮用水' },
+    { id: uuidv4(), team_id: teams[0].id, day_index: 3, route_node: '上雨崩 → 下雨崩 → 神瀑 → 下雨崩', accommodation: '下雨崩客栈', duration: '约5小时', notes: '神瀑是藏民转山圣地，尊重当地风俗' },
+    { id: uuidv4(), team_id: teams[0].id, day_index: 4, route_node: '下雨崩 → 尼农大峡谷 → 德钦', accommodation: '德钦酒店', duration: '约6小时', notes: '尼农峡谷路段较窄，注意落石' },
+  ]
+
+  const insertItinerary = db.prepare(
+    'INSERT INTO team_itineraries (id, team_id, day_index, route_node, accommodation, duration, notes) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  )
+
+  for (const it of itineraries) {
+    insertItinerary.run(it.id, it.team_id, it.day_index, it.route_node, it.accommodation, it.duration, it.notes)
   }
 
   const messagesData = [

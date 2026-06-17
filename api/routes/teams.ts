@@ -70,6 +70,10 @@ router.get('/:id', (req: Request, res: Response): void => {
     ORDER BY m.created_at ASC
   `).all(team.id) as any[]
 
+  const itineraries = db.prepare(`
+    SELECT * FROM team_itineraries WHERE team_id = ? ORDER BY day_index ASC
+  `).all(team.id) as any[]
+
   res.json({
     success: true,
     data: {
@@ -77,7 +81,8 @@ router.get('/:id', (req: Request, res: Response): void => {
       route_photo: team.route_photos ? JSON.parse(team.route_photos)[0] || null : null,
       route_photos: undefined,
       members,
-      messages
+      messages,
+      itineraries
     }
   })
 })
@@ -132,6 +137,7 @@ router.post('/', authMiddleware, (req: Request, res: Response): void => {
 router.post('/:id/join', authMiddleware, (req: Request, res: Response): void => {
   const teamId = req.params.id
   const userId = req.user!.userId
+  const { intro, experience } = req.body
 
   const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId) as any
   if (!team) {
@@ -144,6 +150,11 @@ router.post('/:id/join', authMiddleware, (req: Request, res: Response): void => 
     return
   }
 
+  if (team.leader_id === userId) {
+    res.status(400).json({ success: false, error: '你是队长，无需申请' })
+    return
+  }
+
   const existing = db.prepare('SELECT id FROM team_members WHERE team_id = ? AND user_id = ?').get(teamId, userId) as any
   if (existing) {
     res.status(409).json({ success: false, error: '已申请过该队伍' })
@@ -152,11 +163,11 @@ router.post('/:id/join', authMiddleware, (req: Request, res: Response): void => 
 
   const id = uuidv4()
   db.prepare(`
-    INSERT INTO team_members (id, team_id, user_id, status)
-    VALUES (?, ?, ?, 'pending')
-  `).run(id, teamId, userId)
+    INSERT INTO team_members (id, team_id, user_id, status, intro, experience)
+    VALUES (?, ?, ?, 'pending', ?, ?)
+  `).run(id, teamId, userId, intro || null, experience || null)
 
-  res.status(201).json({ success: true, data: { teamId, userId, status: 'pending' } })
+  res.status(201).json({ success: true, data: { id, teamId, userId, status: 'pending' } })
 })
 
 router.put('/:id/approve', authMiddleware, (req: Request, res: Response): void => {
@@ -174,7 +185,12 @@ router.put('/:id/approve', authMiddleware, (req: Request, res: Response): void =
     return
   }
 
-  const member = db.prepare('SELECT * FROM team_members WHERE team_id = ? AND user_id = ?').get(teamId, userId) as any
+  const member = db.prepare(`
+    SELECT tm.*, u.username
+    FROM team_members tm
+    LEFT JOIN users u ON tm.user_id = u.id
+    WHERE tm.team_id = ? AND tm.user_id = ?
+  `).get(teamId, userId) as any
   if (!member) {
     res.status(404).json({ success: false, error: '该用户未申请加入' })
     return
@@ -187,6 +203,13 @@ router.put('/:id/approve', authMiddleware, (req: Request, res: Response): void =
     if (approvedCount.count >= team.expected_count) {
       db.prepare("UPDATE teams SET status = 'full' WHERE id = ?").run(teamId)
     }
+
+    const msgId = uuidv4()
+    const systemContent = `🎉 ${member.username} 已通过审核，加入了队伍`
+    db.prepare(`
+      INSERT INTO messages (id, team_id, user_id, content, type)
+      VALUES (?, ?, ?, ?, 'system')
+    `).run(msgId, teamId, team.leader_id, systemContent)
   } else {
     db.prepare('DELETE FROM team_members WHERE team_id = ? AND user_id = ?').run(teamId, userId)
   }
@@ -222,6 +245,45 @@ router.delete('/:id/members/:userId', authMiddleware, (req: Request, res: Respon
   }
 
   res.json({ success: true, data: { removed: true } })
+})
+
+router.put('/:id/itineraries', authMiddleware, (req: Request, res: Response): void => {
+  const teamId = req.params.id
+  const userId = req.user!.userId
+  const { itineraries }: { itineraries: { id?: string; dayIndex: number; routeNode: string; accommodation?: string; duration?: string; notes?: string }[] } = req.body
+
+  const team = db.prepare('SELECT * FROM teams WHERE id = ?').get(teamId) as any
+  if (!team) {
+    res.status(404).json({ success: false, error: '队伍不存在' })
+    return
+  }
+
+  if (team.leader_id !== userId) {
+    res.status(403).json({ success: false, error: '仅队长可以编辑行程' })
+    return
+  }
+
+  if (!Array.isArray(itineraries)) {
+    res.status(400).json({ success: false, error: '行程格式不正确' })
+    return
+  }
+
+  db.prepare('DELETE FROM team_itineraries WHERE team_id = ?').run(teamId)
+
+  const insertItinerary = db.prepare(`
+    INSERT INTO team_itineraries (id, team_id, day_index, route_node, accommodation, duration, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+
+  const saved: any[] = []
+  itineraries.forEach((it) => {
+    if (!it.routeNode?.trim()) return
+    const id = it.id || uuidv4()
+    insertItinerary.run(id, teamId, it.dayIndex || 1, it.routeNode, it.accommodation || null, it.duration || null, it.notes || null)
+    saved.push({ id, team_id: teamId, day_index: it.dayIndex, route_node: it.routeNode, accommodation: it.accommodation || null, duration: it.duration || null, notes: it.notes || null })
+  })
+
+  res.json({ success: true, data: saved })
 })
 
 router.get('/:id/messages', authMiddleware, (req: Request, res: Response): void => {

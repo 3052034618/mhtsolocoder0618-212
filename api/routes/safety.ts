@@ -58,13 +58,30 @@ router.get('/status', authMiddleware, (req: Request, res: Response): void => {
   const userId = req.user!.userId
 
   const activeCheckin = db.prepare(`
-    SELECT sc.*, r.name as route_name
+    SELECT sc.*, r.name as route_name, t.date || ' ' || r.name as team_name
     FROM safety_checkins sc
     LEFT JOIN routes r ON sc.route_id = r.id
+    LEFT JOIN teams t ON sc.team_id = t.id
     WHERE sc.user_id = ? AND sc.status = 'active'
   `).get(userId) as any
 
   res.json({ success: true, data: activeCheckin || null })
+})
+
+router.get('/history', authMiddleware, (req: Request, res: Response): void => {
+  const userId = req.user!.userId
+
+  const records = db.prepare(`
+    SELECT sc.*, r.name as route_name, t.date || ' ' || r.name as team_name
+    FROM safety_checkins sc
+    LEFT JOIN routes r ON sc.route_id = r.id
+    LEFT JOIN teams t ON sc.team_id = t.id
+    WHERE sc.user_id = ?
+    ORDER BY sc.checkin_time DESC
+    LIMIT 20
+  `).all(userId) as any[]
+
+  res.json({ success: true, data: records })
 })
 
 router.put('/contacts', authMiddleware, (req: Request, res: Response): void => {

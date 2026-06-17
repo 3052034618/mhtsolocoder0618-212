@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Route as RouteIcon, Star, Users, Phone, Shield, Plus, Trash2 } from 'lucide-react'
+import { Route as RouteIcon, Star, Users, Phone, Shield, Plus, Trash2, MapPin, Calendar, ChevronRight } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/hooks/useAuthStore'
 import type { Route, Team, SafetyCheckin, EmergencyContact } from '@/types'
@@ -199,6 +199,9 @@ function EmergencyContactsSection() {
 
 function SafetySection() {
   const [checkin, setCheckin] = useState<SafetyCheckin | null>(null)
+  const [history, setHistory] = useState<SafetyCheckin[]>([])
+  const [myTeams, setMyTeams] = useState<Team[]>([])
+  const [myRoutes, setMyRoutes] = useState<Route[]>([])
   const [loading, setLoading] = useState(true)
   const [checking, setChecking] = useState(false)
   const [showCheckinModal, setShowCheckinModal] = useState(false)
@@ -207,10 +210,35 @@ function SafetySection() {
   const [expectedReturn, setExpectedReturn] = useState('')
   const [checkinError, setCheckinError] = useState('')
   const [countdown, setCountdown] = useState('')
+  const [associateType, setAssociateType] = useState<'none' | 'team' | 'route'>('none')
+  const [associateTeamId, setAssociateTeamId] = useState('')
+  const [associateRouteId, setAssociateRouteId] = useState('')
 
   useEffect(() => {
-    loadStatus()
+    loadAll()
   }, [])
+
+  async function loadAll() {
+    setLoading(true)
+    try {
+      const [status, hist, teams, routes, favs] = await Promise.all([
+        api.safety.status().catch(() => null),
+        api.safety.history().catch(() => []),
+        api.users.myTeams().catch(() => []),
+        api.users.myRoutes().catch(() => []),
+        api.users.myFavorites().catch(() => []),
+      ])
+      if (status?.status === 'active') setCheckin(status)
+      setHistory((hist || []).filter(h => h.status !== 'active'))
+      setMyTeams(teams || [])
+      const routeSet = new Map<string, Route>()
+      ;(routes || []).forEach(r => routeSet.set(r.id, r))
+      ;(favs || []).forEach(r => routeSet.set(r.id, r))
+      setMyRoutes(Array.from(routeSet.values()))
+    } catch {} finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     if (!checkin?.expectedReturnTime) return
@@ -231,15 +259,6 @@ function SafetySection() {
     return () => clearInterval(timer)
   }, [checkin?.expectedReturnTime])
 
-  async function loadStatus() {
-    try {
-      const data = await api.safety.status()
-      if (data?.status === 'active') setCheckin(data)
-    } catch {} finally {
-      setLoading(false)
-    }
-  }
-
   async function handleCheckin() {
     if (!expectedReturn) {
       setCheckinError('请选择预计返回时间')
@@ -249,15 +268,19 @@ function SafetySection() {
     setCheckinError('')
     try {
       const data = await api.safety.checkin({
-        teamId: '',
-        routeId: '',
+        teamId: associateType === 'team' && associateTeamId ? associateTeamId : null,
+        routeId: associateType === 'route' && associateRouteId ? associateRouteId : null,
         expectedReturnTime: expectedReturn,
       })
       setCheckin(data)
       setShowCheckinModal(false)
       setCheckinSuccess(true)
       setExpectedReturn('')
+      setAssociateType('none')
+      setAssociateTeamId('')
+      setAssociateRouteId('')
       setTimeout(() => setCheckinSuccess(false), 3000)
+      await loadAll()
     } catch (e: any) {
       setCheckinError(e.message || '打卡失败')
     } finally {
@@ -272,9 +295,19 @@ function SafetySection() {
       setCheckin(null)
       setCheckoutSuccess(true)
       setTimeout(() => setCheckoutSuccess(false), 3000)
+      await loadAll()
     } catch {} finally {
       setChecking(false)
     }
+  }
+
+  function openModal() {
+    setExpectedReturn('')
+    setCheckinError('')
+    setAssociateType('none')
+    setAssociateTeamId('')
+    setAssociateRouteId('')
+    setShowCheckinModal(true)
   }
 
   if (loading) return <div className="animate-pulse h-32 bg-fog-200 rounded-xl" />
@@ -304,7 +337,7 @@ function SafetySection() {
             <div className={`w-12 h-12 rounded-full flex items-center justify-center ${countdown === '已超时' ? 'bg-red-100' : 'bg-warning-50'}`}>
               <Shield className={`w-6 h-6 ${countdown === '已超时' ? 'text-red-500' : 'text-warning-500'}`} />
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <h3 className={`font-semibold ${countdown === '已超时' ? 'text-red-700' : 'text-gray-800'}`}>
                 {countdown === '已超时' ? '已超出预计返回时间' : '当前有活跃打卡'}
               </h3>
@@ -314,8 +347,16 @@ function SafetySection() {
             </div>
           </div>
           <div className="space-y-1.5 text-sm bg-fog-50 rounded-lg p-3 mb-4">
-            <p><span className="text-gray-400 inline-block w-20">出发时间：</span>{new Date(checkin.checkinTime).toLocaleString('zh-CN')}</p>
-            <p><span className="text-gray-400 inline-block w-20">预计返回：</span>{new Date(checkin.expectedReturnTime).toLocaleString('zh-CN')}</p>
+            <p className="flex gap-2"><span className="text-gray-400 shrink-0 w-20">出发时间：</span><span>{new Date(checkin.checkinTime).toLocaleString('zh-CN')}</span></p>
+            <p className="flex gap-2"><span className="text-gray-400 shrink-0 w-20">预计返回：</span><span>{new Date(checkin.expectedReturnTime).toLocaleString('zh-CN')}</span></p>
+            {(checkin.teamName || checkin.routeName) && (
+              <p className="flex gap-2">
+                <span className="text-gray-400 shrink-0 w-20">关联行程：</span>
+                <span className="text-forest-700 font-medium">
+                  {checkin.teamName || checkin.routeName}
+                </span>
+              </p>
+            )}
           </div>
           <button onClick={handleCheckout} disabled={checking} className="btn-primary w-full">
             {checking ? '处理中...' : '安全归来'}
@@ -332,17 +373,95 @@ function SafetySection() {
               <p className="text-sm text-gray-500 mt-1">出发前打卡设置预计返回时间，超时未归将自动通知紧急联系人</p>
             </div>
           </div>
-          <button onClick={() => setShowCheckinModal(true)} className="btn-warning w-full">
+          <button onClick={openModal} className="btn-warning w-full">
             出发打卡
           </button>
         </div>
       )}
 
+      {history.length > 0 && (
+        <div className="card-static rounded-xl p-5">
+          <h3 className="section-title mb-4">打卡历史</h3>
+          <div className="space-y-2">
+            {history.map((h) => (
+              <div key={h.id} className="flex items-center justify-between p-3 bg-fog-50 rounded-lg">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center shrink-0">
+                    <Shield className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-800 truncate">
+                      {h.teamName || h.routeName || '自由徒步'}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {new Date(h.checkinTime).toLocaleDateString('zh-CN')} · 时长约 {
+                        h.checkoutTime
+                          ? `${Math.round((new Date(h.checkoutTime).getTime() - new Date(h.checkinTime).getTime()) / 3600000)}小时`
+                          : '进行中'
+                      }
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full shrink-0">
+                  {h.status === 'completed' ? '已完成' : h.status === 'active' ? '进行中' : h.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {showCheckinModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowCheckinModal(false)}>
-          <div className="bg-white rounded-xl p-6 w-full max-w-md animate-slide-up" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md animate-slide-up max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="font-serif text-lg font-semibold text-forest-800 mb-4">出发打卡</h3>
             <div className="space-y-4">
+              <div>
+                <label className="label-text">关联行程（可选）</label>
+                <div className="flex gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setAssociateType('none')}
+                    className={`flex-1 py-2 text-sm rounded-lg border transition-colors ${
+                      associateType === 'none' ? 'bg-forest-600 text-white border-forest-600' : 'bg-fog-50 text-gray-600 border-fog-200 hover:bg-fog-100'
+                    }`}
+                  >不关联</button>
+                  <button
+                    type="button"
+                    onClick={() => setAssociateType('team')}
+                    className={`flex-1 py-2 text-sm rounded-lg border transition-colors ${
+                      associateType === 'team' ? 'bg-forest-600 text-white border-forest-600' : 'bg-fog-50 text-gray-600 border-fog-200 hover:bg-fog-100'
+                    }`}
+                  >关联队伍</button>
+                  <button
+                    type="button"
+                    onClick={() => setAssociateType('route')}
+                    className={`flex-1 py-2 text-sm rounded-lg border transition-colors ${
+                      associateType === 'route' ? 'bg-forest-600 text-white border-forest-600' : 'bg-fog-50 text-gray-600 border-fog-200 hover:bg-fog-100'
+                    }`}
+                  >关联路线</button>
+                </div>
+                {associateType === 'team' && (
+                  myTeams.length > 0 ? (
+                    <select value={associateTeamId} onChange={e => setAssociateTeamId(e.target.value)} className="input-field text-sm">
+                      <option value="">选择要关联的队伍</option>
+                      {myTeams.map(t => <option key={t.id} value={t.id}>{t.routeName} · {t.date}</option>)}
+                    </select>
+                  ) : (
+                    <p className="text-xs text-gray-400">暂无队伍，<Link to="/teams" className="text-forest-600">去组队广场看看</Link></p>
+                  )
+                )}
+                {associateType === 'route' && (
+                  myRoutes.length > 0 ? (
+                    <select value={associateRouteId} onChange={e => setAssociateRouteId(e.target.value)} className="input-field text-sm">
+                      <option value="">选择要关联的路线</option>
+                      {myRoutes.map(r => <option key={r.id} value={r.id}>{r.name} · {r.province}</option>)}
+                    </select>
+                  ) : (
+                    <p className="text-xs text-gray-400">暂无发布或收藏的路线</p>
+                  )
+                )}
+              </div>
               <div>
                 <label className="label-text">预计返回时间 *</label>
                 <input
@@ -357,7 +476,7 @@ function SafetySection() {
               {checkinError && <p className="text-sm text-red-500">{checkinError}</p>}
               <div className="flex gap-3 pt-2">
                 <button onClick={() => setShowCheckinModal(false)} className="btn-secondary flex-1">取消</button>
-                <button onClick={handleCheckin} disabled={checking} className="btn-warning flex-1">
+                <button onClick={handleCheckin} disabled={checking || !expectedReturn} className="btn-warning flex-1">
                   {checking ? '打卡中...' : '确认出发'}
                 </button>
               </div>

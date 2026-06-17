@@ -102,12 +102,20 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    join: (id: string) =>
-      request<any>(`/teams/${id}/join`, { method: 'POST' }),
+    join: (id: string, data?: { intro?: string; experience?: string }) =>
+      request<any>(`/teams/${id}/join`, {
+        method: 'POST',
+        body: JSON.stringify(data || {}),
+      }),
     approve: (id: string, userId: string, approved: boolean) =>
       request<any>(`/teams/${id}/approve`, {
         method: 'PUT',
         body: JSON.stringify({ userId, approved }),
+      }),
+    saveItineraries: (id: string, itineraries: any[]) =>
+      request<any>(`/teams/${id}/itineraries`, {
+        method: 'PUT',
+        body: JSON.stringify({ itineraries }),
       }),
     removeMember: (teamId: string, userId: string) =>
       request<any>(`/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
@@ -120,7 +128,7 @@ export const api = {
   },
 
   safety: {
-    checkin: (data: { teamId: string; routeId: string; expectedReturnTime: string }) =>
+    checkin: (data: { teamId?: string | null; routeId?: string | null; expectedReturnTime: string }) =>
       request<any>('/safety/checkin', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -128,6 +136,7 @@ export const api = {
     checkout: () =>
       request<any>('/safety/checkout', { method: 'POST' }),
     status: () => request<any>('/safety/status'),
+    history: () => request<any[]>('/safety/history'),
     updateContacts: (contacts: { name: string; phone: string }[]) =>
       request<any>('/safety/contacts', {
         method: 'PUT',

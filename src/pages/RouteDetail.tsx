@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Heart, Clock, Mountain, AlertTriangle, Star, Calendar, X, Send } from 'lucide-react'
+import { ArrowLeft, Heart, Clock, Mountain, AlertTriangle, Star, Calendar, X, Send, Download, Image, Route } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/hooks/useAuthStore'
 import DifficultyBadge from '@/components/DifficultyBadge'
@@ -173,16 +173,46 @@ export default function RouteDetail() {
         </div>
       )}
 
-      {route.photos?.length > 1 && (
+      {(route.photos?.length || route.gpxUrl) && (
         <div className="mb-8">
-          <h2 className="section-title mb-4">路线照片</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-            {route.photos.map((photo, i) => (
-              <button key={i} onClick={() => setPhotoModal(photo)} className="aspect-square rounded-lg overflow-hidden hover:opacity-90 transition-opacity">
-                <img src={photo} alt={`${route.name} ${i + 1}`} className="w-full h-full object-cover" />
-              </button>
-            ))}
-          </div>
+          <h2 className="section-title mb-4 flex items-center gap-2">
+            <Image className="w-5 h-5 text-sand-500" />
+            路线资料
+          </h2>
+          {route.gpxUrl && (
+            <div className="mb-4">
+              <a
+                href={route.gpxUrl}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-forest-50 text-forest-700 rounded-lg border border-forest-200 hover:bg-forest-100 transition-colors"
+              >
+                <Route className="w-4 h-4" />
+                <span className="text-sm font-medium">下载 GPX 轨迹文件</span>
+                <Download className="w-3.5 h-3.5" />
+              </a>
+              <p className="text-xs text-gray-400 mt-1.5 ml-1">可导入户外手表或导航 App 使用</p>
+            </div>
+          )}
+          {route.photos?.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {route.photos.map((photo, i) => (
+                <button
+                  key={i}
+                  onClick={() => setPhotoModal(photo)}
+                  className="aspect-square rounded-lg overflow-hidden hover:opacity-90 transition-opacity relative group"
+                >
+                  <img src={photo} alt={`${route.name} ${i + 1}`} className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <span className="opacity-0 group-hover:opacity-100 text-white text-xs bg-black/50 px-2 py-1 rounded transition-opacity">
+                      点击放大
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
