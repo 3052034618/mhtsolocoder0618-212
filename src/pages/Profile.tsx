@@ -73,6 +73,7 @@ function EmergencyContactsSection() {
   const [contacts, setContacts] = useState<EmergencyContact[]>([{ name: '', phone: '' }])
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
     api.safety.getContacts().then((data) => {
@@ -82,41 +83,92 @@ function EmergencyContactsSection() {
 
   function updateContact(idx: number, field: 'name' | 'phone', value: string) {
     setContacts((prev) => prev.map((c, i) => i === idx ? { ...c, [field]: value } : c))
+    setSaved(false)
+    setSaveError('')
   }
 
   function addContact() {
     setContacts((prev) => [...prev, { name: '', phone: '' }])
+    setSaved(false)
   }
 
   function removeContact(idx: number) {
     setContacts((prev) => prev.filter((_, i) => i !== idx))
+    setSaved(false)
   }
 
   async function handleSave() {
+    const valid = contacts.filter((c) => c.name && c.phone)
+    if (valid.length === 0) {
+      setSaveError('请至少填写一个联系人')
+      return
+    }
     setSaving(true)
     setSaved(false)
+    setSaveError('')
     try {
-      await api.safety.updateContacts(contacts.filter((c) => c.name && c.phone))
+      await api.safety.updateContacts(valid)
       setSaved(true)
-    } catch {} finally {
+      setTimeout(() => setSaved(false), 3000)
+    } catch (e: any) {
+      setSaveError(e.message || '保存失败')
+    } finally {
       setSaving(false)
     }
   }
 
   return (
     <div className="space-y-4">
-      {contacts.map((c, i) => (
-        <div key={i} className="flex gap-3 items-start">
-          <input value={c.name} onChange={(e) => updateContact(i, 'name', e.target.value)} placeholder="姓名" className="input-field flex-1" />
-          <input value={c.phone} onChange={(e) => updateContact(i, 'phone', e.target.value)} placeholder="电话" className="input-field flex-1" />
-          {contacts.length > 1 && (
-            <button onClick={() => removeContact(i)} className="p-2 text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
-          )}
+      <div className="card-static rounded-xl p-5">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-warning-50 flex items-center justify-center shrink-0">
+            <Phone className="w-5 h-5 text-warning-500" />
+          </div>
+          <div>
+            <h3 className="font-medium text-gray-800">紧急联系人设置</h3>
+            <p className="text-xs text-gray-400 mt-0.5">若超出预计返回时间未打卡，系统将自动通知以下联系人</p>
+          </div>
         </div>
-      ))}
-      <button onClick={addContact} className="text-sm text-forest-600 hover:text-forest-700 flex items-center gap-1"><Plus className="w-4 h-4" /> 添加联系人</button>
-      <button onClick={handleSave} disabled={saving} className="btn-primary w-full">{saving ? '保存中...' : '保存联系人'}</button>
-      {saved && <p className="text-sm text-green-600 text-center">保存成功</p>}
+
+        <div className="space-y-3">
+          {contacts.map((c, i) => (
+            <div key={i} className="flex gap-3 items-start">
+              <div className="w-8 h-8 rounded-full bg-fog-100 flex items-center justify-center text-sm font-medium text-gray-500 shrink-0 mt-2">{i + 1}</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+                <input value={c.name} onChange={(e) => updateContact(i, 'name', e.target.value)} placeholder="联系人姓名" className="input-field" />
+                <input value={c.phone} onChange={(e) => updateContact(i, 'phone', e.target.value)} placeholder="联系电话" className="input-field" />
+              </div>
+              {contacts.length > 1 && (
+                <button onClick={() => removeContact(i)} className="p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-1">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3 mt-5 pt-4 border-t border-fog-200">
+          <button onClick={addContact} className="text-sm text-forest-600 hover:text-forest-700 flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-forest-50 transition-colors">
+            <Plus className="w-4 h-4" /> 添加联系人
+          </button>
+          <div className="flex-1" />
+          <button onClick={handleSave} disabled={saving} className="btn-primary px-6">
+            {saving ? '保存中...' : '保存设置'}
+          </button>
+        </div>
+
+        {saved && (
+          <div className="mt-4 flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg animate-fade-in">
+            <div className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+            </div>
+            <span className="text-sm text-green-700 font-medium">紧急联系人已保存生效，系统将在紧急情况时自动联系</span>
+          </div>
+        )}
+        {saveError && (
+          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{saveError}</div>
+        )}
+      </div>
     </div>
   )
 }
@@ -125,10 +177,35 @@ function SafetySection() {
   const [checkin, setCheckin] = useState<SafetyCheckin | null>(null)
   const [loading, setLoading] = useState(true)
   const [checking, setChecking] = useState(false)
+  const [showCheckinModal, setShowCheckinModal] = useState(false)
+  const [checkinSuccess, setCheckinSuccess] = useState(false)
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false)
+  const [expectedReturn, setExpectedReturn] = useState('')
+  const [checkinError, setCheckinError] = useState('')
+  const [countdown, setCountdown] = useState('')
 
   useEffect(() => {
     loadStatus()
   }, [])
+
+  useEffect(() => {
+    if (!checkin?.expectedReturnTime) return
+    const update = () => {
+      const target = new Date(checkin.expectedReturnTime).getTime()
+      const now = Date.now()
+      const diff = target - now
+      if (diff <= 0) {
+        setCountdown('已超时')
+        return
+      }
+      const h = Math.floor(diff / 3600000)
+      const m = Math.floor((diff % 3600000) / 60000)
+      setCountdown(h > 0 ? `${h}小时${m}分钟` : `${m}分钟`)
+    }
+    update()
+    const timer = setInterval(update, 60000)
+    return () => clearInterval(timer)
+  }, [checkin?.expectedReturnTime])
 
   async function loadStatus() {
     try {
@@ -139,11 +216,38 @@ function SafetySection() {
     }
   }
 
+  async function handleCheckin() {
+    if (!expectedReturn) {
+      setCheckinError('请选择预计返回时间')
+      return
+    }
+    setChecking(true)
+    setCheckinError('')
+    try {
+      const data = await api.safety.checkin({
+        teamId: '',
+        routeId: '',
+        expectedReturnTime: expectedReturn,
+      })
+      setCheckin(data)
+      setShowCheckinModal(false)
+      setCheckinSuccess(true)
+      setExpectedReturn('')
+      setTimeout(() => setCheckinSuccess(false), 3000)
+    } catch (e: any) {
+      setCheckinError(e.message || '打卡失败')
+    } finally {
+      setChecking(false)
+    }
+  }
+
   async function handleCheckout() {
     setChecking(true)
     try {
       await api.safety.checkout()
       setCheckin(null)
+      setCheckoutSuccess(true)
+      setTimeout(() => setCheckoutSuccess(false), 3000)
     } catch {} finally {
       setChecking(false)
     }
@@ -153,21 +257,88 @@ function SafetySection() {
 
   return (
     <div className="space-y-4">
-      {checkin ? (
-        <div className="card-static rounded-xl p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <Shield className="w-5 h-5 text-warning-500" />
-            <span className="font-medium text-gray-800">当前有活跃打卡</span>
+      {checkinSuccess && (
+        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg animate-fade-in">
+          <div className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
           </div>
-          <p className="text-sm text-gray-600">出发时间: {new Date(checkin.checkinTime).toLocaleString('zh-CN')}</p>
-          <p className="text-sm text-gray-600">预计返回: {new Date(checkin.expectedReturnTime).toLocaleString('zh-CN')}</p>
-          <button onClick={handleCheckout} disabled={checking} className="btn-primary w-full mt-4">安全归来</button>
+          <span className="text-sm text-green-700 font-medium">出发打卡成功！系统会自动监控您的安全状态</span>
+        </div>
+      )}
+      {checkoutSuccess && (
+        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg animate-fade-in">
+          <div className="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+          </div>
+          <span className="text-sm text-green-700 font-medium">欢迎安全归来！打卡记录已更新</span>
+        </div>
+      )}
+
+      {checkin ? (
+        <div className={`card-static rounded-xl p-5 ${countdown === '已超时' ? 'border-red-300 bg-red-50 animate-pulse-slow' : ''}`}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${countdown === '已超时' ? 'bg-red-100' : 'bg-warning-50'}`}>
+              <Shield className={`w-6 h-6 ${countdown === '已超时' ? 'text-red-500' : 'text-warning-500'}`} />
+            </div>
+            <div>
+              <h3 className={`font-semibold ${countdown === '已超时' ? 'text-red-700' : 'text-gray-800'}`}>
+                {countdown === '已超时' ? '已超出预计返回时间' : '当前有活跃打卡'}
+              </h3>
+              <p className="text-sm text-gray-500">
+                {countdown === '已超时' ? '系统会自动通知紧急联系人' : `预计返回倒计时：${countdown}`}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-1.5 text-sm bg-fog-50 rounded-lg p-3 mb-4">
+            <p><span className="text-gray-400 inline-block w-20">出发时间：</span>{new Date(checkin.checkinTime).toLocaleString('zh-CN')}</p>
+            <p><span className="text-gray-400 inline-block w-20">预计返回：</span>{new Date(checkin.expectedReturnTime).toLocaleString('zh-CN')}</p>
+          </div>
+          <button onClick={handleCheckout} disabled={checking} className="btn-primary w-full">
+            {checking ? '处理中...' : '安全归来'}
+          </button>
         </div>
       ) : (
-        <div className="card-static rounded-xl p-5 text-center text-gray-400">
-          <Shield className="w-10 h-10 mx-auto mb-2 opacity-40" />
-          <p>当前没有活跃打卡</p>
-          <p className="text-sm mt-1">加入出发队伍后可进行安全打卡</p>
+        <div className="card-static rounded-xl p-5">
+          <div className="flex items-start gap-4 mb-5">
+            <div className="w-12 h-12 rounded-full bg-forest-50 flex items-center justify-center shrink-0">
+              <Shield className="w-6 h-6 text-forest-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-800">安全打卡</h3>
+              <p className="text-sm text-gray-500 mt-1">出发前打卡设置预计返回时间，超时未归将自动通知紧急联系人</p>
+            </div>
+          </div>
+          <button onClick={() => setShowCheckinModal(true)} className="btn-warning w-full">
+            出发打卡
+          </button>
+        </div>
+      )}
+
+      {showCheckinModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowCheckinModal(false)}>
+          <div className="bg-white rounded-xl p-6 w-full max-w-md animate-slide-up" onClick={e => e.stopPropagation()}>
+            <h3 className="font-serif text-lg font-semibold text-forest-800 mb-4">出发打卡</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="label-text">预计返回时间 *</label>
+                <input
+                  type="datetime-local"
+                  value={expectedReturn}
+                  onChange={e => { setExpectedReturn(e.target.value); setCheckinError('') }}
+                  className="input-field"
+                  min={new Date().toISOString().slice(0, 16)}
+                />
+                <p className="text-xs text-gray-400 mt-1">建议设置比实际预计晚 1-2 小时，避免误报</p>
+              </div>
+              {checkinError && <p className="text-sm text-red-500">{checkinError}</p>}
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowCheckinModal(false)} className="btn-secondary flex-1">取消</button>
+                <button onClick={handleCheckin} disabled={checking} className="btn-warning flex-1">
+                  {checking ? '打卡中...' : '确认出发'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

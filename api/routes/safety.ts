@@ -52,7 +52,7 @@ router.post('/checkout', authMiddleware, (req: Request, res: Response): void => 
   }
 
   db.prepare(`
-    UPDATE safety_checkins SET checkout_time = datetime('now'), status = 'completed'
+    UPDATE safety_checkins SET checkout_time = datetime('now'), status = 'returned'
     WHERE id = ?
   `).run(activeCheckin.id)
 

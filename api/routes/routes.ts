@@ -35,7 +35,7 @@ router.get('/', (req: Request, res: Response): void => {
 
   let sql = `
     SELECT r.*, u.username as author_name,
-      COALESCE(AVG(rv.rating), 0) as avg_rating,
+      COALESCE(AVG(rv.rating), 0) as average_rating,
       COUNT(DISTINCT rv.id) as review_count,
       COUNT(DISTINCT f.id) as favorite_count
     FROM routes r
@@ -71,7 +71,7 @@ router.get('/', (req: Request, res: Response): void => {
     ...r,
     season_recommendation: JSON.parse(r.season_recommendation || '[]'),
     photos: JSON.parse(r.photos || '[]'),
-    avg_rating: Math.round(r.avg_rating * 10) / 10
+    average_rating: Math.round(r.average_rating * 10) / 10
   }))
 
   res.json({ success: true, data: result })
@@ -107,7 +107,7 @@ router.get('/:id', (req: Request, res: Response): void => {
       ...route,
       season_recommendation: JSON.parse(route.season_recommendation || '[]'),
       photos: JSON.parse(route.photos || '[]'),
-      avg_rating: Math.round(avgRating.avg * 10) / 10,
+      average_rating: Math.round(avgRating.avg * 10) / 10,
       favorite_count: favoriteCount.count,
       reviews
     }
@@ -115,7 +115,11 @@ router.get('/:id', (req: Request, res: Response): void => {
 })
 
 router.post('/', authMiddleware, uploadPhotos.array('photos', 9), uploadGpx.single('gpx'), (req: Request, res: Response): void => {
-  const { name, province, start_point, distance, elevation_gain, elevation_loss, difficulty, duration, season_recommendation, precautions } = req.body
+  const { name, province, startPoint, distance, elevationGain, elevationLoss, difficulty, duration, seasonRecommendation, precautions } = req.body
+  const start_point = startPoint
+  const elevation_gain = Number(elevationGain) || 0
+  const elevation_loss = Number(elevationLoss) || 0
+  const season_recommendation = seasonRecommendation
 
   if (!name || !province || !start_point || !distance || !difficulty) {
     res.status(400).json({ success: false, error: '缺少必填字段' })
@@ -134,7 +138,7 @@ router.post('/', authMiddleware, uploadPhotos.array('photos', 9), uploadGpx.sing
       difficulty, duration, season_recommendation, precautions, photos, gpx_url, author_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    id, name, province, start_point, Number(distance), Number(elevation_gain), Number(elevation_loss),
+    id, name, province, start_point, Number(distance), elevation_gain, elevation_loss,
     difficulty, duration, JSON.stringify(seasonRec), precautions || '', JSON.stringify(photos), gpxUrl, req.user!.userId
   )
 

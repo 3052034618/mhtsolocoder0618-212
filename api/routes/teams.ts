@@ -10,7 +10,7 @@ router.get('/', (req: Request, res: Response): void => {
 
   let sql = `
     SELECT t.*, r.name as route_name, r.photos as route_photos, u.username as leader_name,
-      COUNT(DISTINCT tm.id) as member_count
+      COUNT(DISTINCT tm.id) as approved_count
     FROM teams t
     LEFT JOIN routes r ON t.route_id = r.id
     LEFT JOIN users u ON t.leader_id = u.id
@@ -41,7 +41,8 @@ router.get('/', (req: Request, res: Response): void => {
 
 router.get('/:id', (req: Request, res: Response): void => {
   const team = db.prepare(`
-    SELECT t.*, r.name as route_name, r.photos as route_photos, u.username as leader_name
+    SELECT t.*, r.name as route_name, r.photos as route_photos, u.username as leader_name,
+      (SELECT COUNT(*) FROM team_members tm WHERE tm.team_id = t.id AND tm.status = 'approved') as approved_count
     FROM teams t
     LEFT JOIN routes r ON t.route_id = r.id
     LEFT JOIN users u ON t.leader_id = u.id
@@ -82,7 +83,10 @@ router.get('/:id', (req: Request, res: Response): void => {
 })
 
 router.post('/', authMiddleware, (req: Request, res: Response): void => {
-  const { route_id, date, meeting_point, expected_count, notes } = req.body
+  const { routeId, date, meetingPoint, expectedCount, notes } = req.body
+  const route_id = routeId
+  const meeting_point = meetingPoint
+  const expected_count = expectedCount
 
   if (!route_id || !date || !meeting_point) {
     res.status(400).json({ success: false, error: '缺少必填字段' })
@@ -108,14 +112,21 @@ router.post('/', authMiddleware, (req: Request, res: Response): void => {
   `).run(memberId, id, req.user!.userId)
 
   const team = db.prepare(`
-    SELECT t.*, r.name as route_name, u.username as leader_name
+    SELECT t.*, r.name as route_name, r.photos as route_photos, u.username as leader_name,
+      (SELECT COUNT(*) FROM team_members tm WHERE tm.team_id = t.id AND tm.status = 'approved') as approved_count
     FROM teams t
     LEFT JOIN routes r ON t.route_id = r.id
     LEFT JOIN users u ON t.leader_id = u.id
     WHERE t.id = ?
   `).get(id) as any
 
-  res.status(201).json({ success: true, data: team })
+  const teamWithPhoto = {
+    ...team,
+    route_photo: team.route_photos ? JSON.parse(team.route_photos)[0] || null : null,
+    route_photos: undefined
+  }
+
+  res.status(201).json({ success: true, data: teamWithPhoto })
 })
 
 router.post('/:id/join', authMiddleware, (req: Request, res: Response): void => {

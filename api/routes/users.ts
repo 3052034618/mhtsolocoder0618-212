@@ -7,7 +7,7 @@ const router = Router()
 router.get('/me/routes', authMiddleware, (req: Request, res: Response): void => {
   const routes = db.prepare(`
     SELECT r.*,
-      COALESCE(AVG(rv.rating), 0) as avg_rating,
+      COALESCE(AVG(rv.rating), 0) as average_rating,
       COUNT(DISTINCT rv.id) as review_count,
       COUNT(DISTINCT f.id) as favorite_count
     FROM routes r
@@ -22,7 +22,7 @@ router.get('/me/routes', authMiddleware, (req: Request, res: Response): void => 
     ...r,
     season_recommendation: JSON.parse(r.season_recommendation || '[]'),
     photos: JSON.parse(r.photos || '[]'),
-    avg_rating: Math.round(r.avg_rating * 10) / 10
+    average_rating: Math.round(r.average_rating * 10) / 10
   }))
 
   res.json({ success: true, data: result })
@@ -31,7 +31,7 @@ router.get('/me/routes', authMiddleware, (req: Request, res: Response): void => 
 router.get('/me/favorites', authMiddleware, (req: Request, res: Response): void => {
   const routes = db.prepare(`
     SELECT r.*, u.username as author_name,
-      COALESCE(AVG(rv.rating), 0) as avg_rating,
+      COALESCE(AVG(rv.rating), 0) as average_rating,
       COUNT(DISTINCT rv.id) as review_count
     FROM favorites f
     JOIN routes r ON f.route_id = r.id
@@ -46,7 +46,7 @@ router.get('/me/favorites', authMiddleware, (req: Request, res: Response): void 
     ...r,
     season_recommendation: JSON.parse(r.season_recommendation || '[]'),
     photos: JSON.parse(r.photos || '[]'),
-    avg_rating: Math.round(r.avg_rating * 10) / 10
+    average_rating: Math.round(r.average_rating * 10) / 10
   }))
 
   res.json({ success: true, data: result })
@@ -55,7 +55,7 @@ router.get('/me/favorites', authMiddleware, (req: Request, res: Response): void 
 router.get('/me/teams', authMiddleware, (req: Request, res: Response): void => {
   const teams = db.prepare(`
     SELECT t.*, r.name as route_name, u.username as leader_name,
-      COUNT(DISTINCT tm2.id) as member_count,
+      COUNT(DISTINCT tm2.id) as approved_count,
       tm.status as my_status
     FROM team_members tm
     JOIN teams t ON tm.team_id = t.id
